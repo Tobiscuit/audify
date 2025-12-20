@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Voice } from '@/types';
 import { VOICE_CREDIT_MULTIPLIERS } from '@/lib/aws/polly';
+import UsageWidget from '@/components/UsageWidget';
 
 // Voice type labels for UI
 const VOICE_TYPE_LABELS: Record<string, { label: string; description: string }> = {
@@ -112,9 +113,18 @@ export default function DashboardPage() {
   const filteredVoices = voices.filter(v => v.engines.includes(selectedEngine));
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="text-center">
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      {/* Sidebar - Usage Widget */}
+      <div className="lg:col-span-1 order-2 lg:order-1">
+        <div className="sticky top-8">
+          <UsageWidget />
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="lg:col-span-3 order-1 lg:order-2 space-y-8">
+        {/* Header */}
+        <div className="text-center">
         <h1 className="text-3xl font-bold text-white mb-2">
           Generate Audio
         </h1>
@@ -233,6 +243,7 @@ export default function DashboardPage() {
             </button>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
