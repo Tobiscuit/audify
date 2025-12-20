@@ -1,14 +1,21 @@
 import { PollyClient, SynthesizeSpeechCommand, DescribeVoicesCommand, Engine, VoiceId, OutputFormat, LanguageCode } from '@aws-sdk/client-polly';
 import { Readable } from 'stream';
 
-// Initialize Polly client
-const pollyClient = new PollyClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
-});
+// Lazy initialization - only create client when first used (at runtime, not build time)
+let _pollyClient: PollyClient | null = null;
+
+function getPollyClient(): PollyClient {
+  if (!_pollyClient) {
+    _pollyClient = new PollyClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    });
+  }
+  return _pollyClient;
+}
 
 // Voice type to engine mapping
 export const VOICE_TYPE_ENGINE_MAP: Record<string, Engine> = {
@@ -43,7 +50,7 @@ export async function synthesizeSpeech(options: SynthesizeOptions): Promise<Read
     LanguageCode: options.languageCode,
   });
 
-  const response = await pollyClient.send(command);
+  const response = await getPollyClient().send(command);
 
   if (!response.AudioStream) {
     throw new Error('No audio stream returned from Polly');
@@ -69,7 +76,7 @@ export async function listVoices(engine?: Engine, languageCode?: LanguageCode): 
     LanguageCode: languageCode,
   });
 
-  const response = await pollyClient.send(command);
+  const response = await getPollyClient().send(command);
 
   return (response.Voices || []).map((voice) => ({
     voiceId: voice.Id || '',
