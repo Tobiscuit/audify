@@ -44,7 +44,7 @@ export default function HomePage() {
             href="/login" 
             className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-4 px-10 rounded-full text-lg hover:opacity-90 transition-opacity"
           >
-            Start Creating Free
+            Start Creating
           </Link>
           <Link 
             href="#pricing" 
@@ -100,7 +100,7 @@ export default function HomePage() {
       <section id="pricing" className="container mx-auto px-4 py-20">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-white mb-4">Simple Pricing</h2>
-          <p className="text-gray-400">Start for free, scale as you grow</p>
+          <p className="text-gray-400">Premium AI voices powered by Amazon Polly</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
@@ -143,7 +143,7 @@ export default function HomePage() {
             href="/login" 
             className="inline-block bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold py-4 px-10 rounded-full text-lg hover:opacity-90 transition-opacity"
           >
-            Get Started Free
+            Start Creating Now
           </Link>
         </div>
       </section>
