@@ -67,7 +67,7 @@ export interface VoiceInfo {
   languageCode: string;
   languageName: string;
   gender: string;
-  engine: string[];
+  engines: string[];
 }
 
 export async function listVoices(engine?: Engine, languageCode?: LanguageCode): Promise<VoiceInfo[]> {
@@ -84,7 +84,7 @@ export async function listVoices(engine?: Engine, languageCode?: LanguageCode): 
     languageCode: voice.LanguageCode || '',
     languageName: voice.LanguageName || '',
     gender: voice.Gender || '',
-    engine: voice.SupportedEngines || [],
+    engines: voice.SupportedEngines || [],
   }));
 }
 
