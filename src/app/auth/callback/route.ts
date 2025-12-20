@@ -29,7 +29,7 @@ export async function GET(request: Request) {
             email: user.email,
             credits: 0,
             is_admin: false,
-          });
+          } as never);
         }
       }
 

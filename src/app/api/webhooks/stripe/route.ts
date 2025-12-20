@@ -61,55 +61,63 @@ export async function POST(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    // Get current user credits
-    const { data: userData, error: fetchError } = await supabaseAdmin
-      .from('users')
-      .select('credits')
-      .eq('id', userId)
-      .single();
+    try {
+      // Get current user credits
+      const { data: userData, error: fetchError } = await supabaseAdmin
+        .from('users')
+        .select('credits')
+        .eq('id', userId)
+        .single();
 
-    if (fetchError) {
-      console.error('Error fetching user:', fetchError);
+      if (fetchError) {
+        console.error('Error fetching user:', fetchError);
+        return NextResponse.json(
+          { error: 'User not found' },
+          { status: 404 }
+        );
+      }
+
+      const currentCredits = (userData as { credits: number } | null)?.credits || 0;
+      const newCredits = currentCredits + credits;
+
+      // Update user credits
+      const { error: updateError } = await supabaseAdmin
+        .from('users')
+        .update({ credits: newCredits } as never)
+        .eq('id', userId);
+
+      if (updateError) {
+        console.error('Error updating credits:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update credits' },
+          { status: 500 }
+        );
+      }
+
+      // Log transaction
+      const { error: transactionError } = await supabaseAdmin
+        .from('transactions')
+        .insert({
+          user_id: userId,
+          package_id: packageId,
+          stripe_session_id: session.id,
+          credits_added: credits,
+          amount_cents: session.amount_total,
+          status: 'completed',
+        } as never);
+
+      if (transactionError) {
+        console.error('Error logging transaction:', transactionError);
+      }
+
+      console.log(`Added ${credits} credits to user ${userId}`);
+    } catch (err) {
+      console.error('Database error:', err);
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    const currentCredits = userData?.credits || 0;
-    const newCredits = currentCredits + credits;
-
-    // Update user credits
-    const { error: updateError } = await supabaseAdmin
-      .from('users')
-      .update({ credits: newCredits })
-      .eq('id', userId);
-
-    if (updateError) {
-      console.error('Error updating credits:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update credits' },
+        { error: 'Database error' },
         { status: 500 }
       );
     }
-
-    // Log transaction
-    const { error: transactionError } = await supabaseAdmin
-      .from('transactions')
-      .insert({
-        user_id: userId,
-        package_id: packageId,
-        stripe_session_id: session.id,
-        credits_added: credits,
-        amount_cents: session.amount_total,
-        status: 'completed',
-      });
-
-    if (transactionError) {
-      console.error('Error logging transaction:', transactionError);
-    }
-
-    console.log(`Added ${credits} credits to user ${userId}`);
   }
 
   return NextResponse.json({ received: true });

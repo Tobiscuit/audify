@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isAdminUser } from '@/lib/auth/admin';
-import { synthesizeSpeech, VOICE_TYPE_ENGINE_MAP, calculateCreditsRequired, getVoiceType } from '@/lib/aws/polly';
+import { synthesizeSpeech, calculateCreditsRequired, getVoiceType } from '@/lib/aws/polly';
 import { uploadAudio, getPresignedUrl, generateAudioKey } from '@/lib/aws/s3';
 import type { SynthesizeRequest, SynthesizeResponse } from '@/types';
 import { VoiceId, Engine } from '@aws-sdk/client-polly';
-import { PassThrough } from 'stream';
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
           email: user.email,
           credits: 0,
           is_admin: isAdmin,
-        });
+        } as never);
 
       if (insertError) {
         console.error('Error creating user:', insertError);
@@ -74,7 +73,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const currentCredits = userData?.credits || 0;
+    const currentCredits = (userData as { credits: number } | null)?.credits || 0;
 
     // Check credits (skip for admin)
     if (!isAdmin && currentCredits < creditsRequired) {
@@ -105,7 +104,7 @@ export async function POST(request: NextRequest) {
     if (!isAdmin) {
       const { error: updateError } = await supabase
         .from('users')
-        .update({ credits: currentCredits - creditsRequired })
+        .update({ credits: currentCredits - creditsRequired } as never)
         .eq('id', user.id);
 
       if (updateError) {
@@ -123,7 +122,7 @@ export async function POST(request: NextRequest) {
         char_count: charCount,
         credits_used: isAdmin ? 0 : creditsRequired,
         s3_key: s3Key,
-      });
+      } as never);
 
     if (historyError) {
       console.error('Error logging usage:', historyError);
