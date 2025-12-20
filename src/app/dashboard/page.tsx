@@ -39,7 +39,7 @@ export default function DashboardPage() {
   // Filter voices when engine changes
   useEffect(() => {
     if (voices.length > 0 && selectedEngine) {
-      const engineVoices = voices.filter(v => v.engines.includes(selectedEngine));
+      const engineVoices = voices.filter(v => v.engines?.includes(selectedEngine));
       if (!selectedVoice || !engineVoices.find(v => v.voiceId === selectedVoice.voiceId)) {
         setSelectedVoice(engineVoices[0] || null);
       }
@@ -110,7 +110,7 @@ export default function DashboardPage() {
     ? selectedVoice.engines 
     : ['standard', 'neural', 'generative', 'long-form'];
 
-  const filteredVoices = voices.filter(v => v.engines.includes(selectedEngine));
+  const filteredVoices = voices.filter(v => v.engines?.includes(selectedEngine));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
