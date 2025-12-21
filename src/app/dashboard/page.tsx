@@ -554,13 +554,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 bg-red-500/20 border border-red-500/50 rounded-xl p-4">
-            <p className="text-red-300">{error}</p>
-          </div>
-        )}
-
         {/* Generate Button */}
         <button
           onClick={handleGenerate}
