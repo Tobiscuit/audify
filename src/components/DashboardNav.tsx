@@ -43,6 +43,12 @@ export default function DashboardNav({ email, credits, isAdmin }: DashboardNavPr
               Library
             </Link>
             <Link 
+              href="/dashboard/batch" 
+              className="text-gray-300 hover:text-white transition-colors"
+            >
+              Batch
+            </Link>
+            <Link 
               href="/dashboard/credits" 
               className="text-gray-300 hover:text-white transition-colors"
             >
