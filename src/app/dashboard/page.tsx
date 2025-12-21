@@ -131,14 +131,14 @@ export default function DashboardPage() {
     ? selectedVoice.engines 
     : ['standard', 'neural', 'generative', 'long-form'];
 
-  // Get unique languages from voices
-  const languages = [...new Set(voices.map(v => v.languageCode))].sort();
+  // Get voices that support the selected engine
+  const engineVoices = voices.filter(v => v.engines?.includes(selectedEngine));
+  
+  // Get unique languages from voices that support the selected engine
+  const languages = [...new Set(engineVoices.map(v => v.languageCode))].sort();
   
   // Filter voices by engine AND language
-  const filteredVoices = voices.filter(v => 
-    v.engines?.includes(selectedEngine) && 
-    v.languageCode === selectedLanguage
-  );
+  const filteredVoices = engineVoices.filter(v => v.languageCode === selectedLanguage);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
