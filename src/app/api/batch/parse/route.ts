@@ -217,6 +217,7 @@ export async function POST(request: NextRequest) {
     const isPDF = fileName.endsWith('.pdf');
     let text: string;
     let sections: FlatSection[];
+    let warning: string | null = null;
 
     if (isPDF) {
       // Handle PDF files
@@ -237,8 +238,10 @@ export async function POST(request: NextRequest) {
             preview: s.content.slice(0, 100) + (s.content.length > 100 ? '...' : ''),
             content: s.content,
           }));
-        } catch (error) {
-          console.error('Textract error, falling back to pdf-parse:', error);
+        } catch (textractError) {
+          console.error('Textract error, falling back to pdf-parse:', textractError);
+          warning = 'AI detection failed for this PDF format. Using pattern matching instead.';
+          // Fall back to pdf-parse
           text = await extractTextFromPDF(buffer);
           sections = detectHierarchicalSections(text);
         }
@@ -276,6 +279,7 @@ export async function POST(request: NextRequest) {
       fileName: file.name,
       totalChars: text.length,
       mode: useAI ? 'ai' : 'regex',
+      warning,
       sections: finalSections.map(s => ({
         id: s.id,
         title: s.title,

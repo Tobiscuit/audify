@@ -169,6 +169,11 @@ export default function DashboardPage() {
         return;
       }
 
+      // Show warning if AI detection fell back
+      if (data.warning) {
+        setError(data.warning);
+      }
+
       setSections(data.sections);
       setSelectedSections(new Set(data.sections.map((s: {id: number}) => s.id)));
     } catch (err) {
@@ -319,6 +324,18 @@ export default function DashboardPage() {
                   <div className="text-center py-4">
                     <div className="animate-spin w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-2"></div>
                     <div className="text-gray-400 text-sm">Analyzing document...</div>
+                  </div>
+                )}
+
+                {/* Error/Warning Alert */}
+                {error && (
+                  <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-xl p-4 flex items-start gap-3">
+                    <span className="text-yellow-400 text-xl">⚠️</span>
+                    <div className="flex-1">
+                      <div className="text-yellow-200 font-medium">Warning</div>
+                      <div className="text-yellow-200/80 text-sm">{error}</div>
+                    </div>
+                    <button onClick={() => setError(null)} className="text-yellow-400 hover:text-white">✕</button>
                   </div>
                 )}
 
