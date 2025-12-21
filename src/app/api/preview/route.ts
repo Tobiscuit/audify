@@ -18,26 +18,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate preview audio (no auth required, no credits charged)
-    const audioStream = await synthesizeSpeech({
+    const audioData = await synthesizeSpeech({
       text: PREVIEW_TEXT,
       voiceId: voiceId as VoiceId,
       engine: engine as Engine,
       outputFormat: 'mp3',
     });
 
-    // Collect stream into buffer
-    const chunks: Buffer[] = [];
-    for await (const chunk of audioStream) {
-      chunks.push(Buffer.from(chunk));
-    }
-    const audioBuffer = Buffer.concat(chunks);
-
     // Return audio directly (no S3 storage for previews)
-    return new NextResponse(audioBuffer, {
+    return new NextResponse(Buffer.from(audioData), {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Length': audioBuffer.length.toString(),
-        'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
+        'Content-Length': audioData.length.toString(),
+        'Cache-Control': 'public, max-age=31536000, immutable', // Cache for 1 year
       },
     });
   } catch (error) {

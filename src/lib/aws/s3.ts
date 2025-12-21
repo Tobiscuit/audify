@@ -1,6 +1,5 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { Readable } from 'stream';
 
 // Lazy initialization - only create client when first used (at runtime, not build time)
 let _s3Client: S3Client | null = null;
@@ -31,23 +30,16 @@ export interface UploadResult {
 }
 
 export async function uploadAudio(
-  audioStream: Readable,
+  audioData: Uint8Array,
   key: string,
   contentType: string = 'audio/mpeg'
 ): Promise<UploadResult> {
-  // Convert stream to buffer for S3 upload
-  const chunks: Buffer[] = [];
-  for await (const chunk of audioStream) {
-    chunks.push(Buffer.from(chunk));
-  }
-  const buffer = Buffer.concat(chunks);
-
   const bucketName = getBucketName();
 
   const command = new PutObjectCommand({
     Bucket: bucketName,
     Key: key,
-    Body: buffer,
+    Body: audioData,
     ContentType: contentType,
   });
 

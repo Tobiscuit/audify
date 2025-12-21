@@ -1,5 +1,4 @@
 import { PollyClient, SynthesizeSpeechCommand, DescribeVoicesCommand, Engine, VoiceId, OutputFormat, LanguageCode } from '@aws-sdk/client-polly';
-import { Readable } from 'stream';
 
 // Lazy initialization - only create client when first used (at runtime, not build time)
 let _pollyClient: PollyClient | null = null;
@@ -41,7 +40,7 @@ export interface SynthesizeOptions {
   languageCode?: LanguageCode;
 }
 
-export async function synthesizeSpeech(options: SynthesizeOptions): Promise<Readable> {
+export async function synthesizeSpeech(options: SynthesizeOptions): Promise<Uint8Array> {
   const command = new SynthesizeSpeechCommand({
     Text: options.text,
     VoiceId: options.voiceId,
@@ -56,9 +55,9 @@ export async function synthesizeSpeech(options: SynthesizeOptions): Promise<Read
     throw new Error('No audio stream returned from Polly');
   }
 
-  // AWS SDK v3 returns a SdkStream, convert to Node Readable
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Readable.fromWeb(response.AudioStream as any);
+  // AWS SDK v3: use transformToByteArray() to get the audio data
+  const audioData = await response.AudioStream.transformToByteArray();
+  return audioData;
 }
 
 export interface VoiceInfo {
