@@ -130,10 +130,10 @@ export async function extractFromPDFWithTextract(pdfBuffer: Buffer): Promise<{
 }
 
 // Simple text extraction (fallback for non-Textract)
+// Uses unpdf - serverless-compatible with zero native dependencies
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  // pdf-parse is CJS, use require pattern
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require('pdf-parse');
-  const data = await pdfParse(pdfBuffer);
-  return data.text;
+  const { extractText } = await import('unpdf');
+  const { text } = await extractText(pdfBuffer);
+  // text is a string[] (one per page), join into single string
+  return Array.isArray(text) ? text.join('\n') : text;
 }

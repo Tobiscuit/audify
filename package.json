@@ -17,10 +17,10 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.89.0",
     "next": "16.1.0",
-    "pdf-parse": "^2.4.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "stripe": "^20.1.0",
+    "unpdf": "^1.4.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
