@@ -13,6 +13,20 @@ const VOICE_TYPE_LABELS: Record<string, { label: string; description: string }> 
   'long-form': { label: 'Long-Form', description: 'Optimized for audiobooks' },
 };
 
+// Audio format labels for UI
+const FORMAT_LABELS: Record<string, { label: string; description: string; icon: string }> = {
+  mp3: { 
+    label: 'MP3', 
+    description: 'Universal compatibility, smaller files', 
+    icon: '🎵' 
+  },
+  ogg_vorbis: { 
+    label: 'OGG', 
+    description: 'Higher quality, open format, great for chapters', 
+    icon: '🎧' 
+  },
+};
+
 export default function DashboardPage() {
   const [text, setText] = useState('');
   const [voices, setVoices] = useState<Voice[]>([]);
@@ -23,6 +37,7 @@ export default function DashboardPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creditsUsed, setCreditsUsed] = useState<number>(0);
+  const [selectedFormat, setSelectedFormat] = useState<string>('mp3');
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Calculate estimated credits
@@ -74,6 +89,7 @@ export default function DashboardPage() {
           text: text.trim(),
           voiceId: selectedVoice.voiceId,
           engine: selectedEngine,
+          outputFormat: selectedFormat,
         }),
       });
 
@@ -102,7 +118,8 @@ export default function DashboardPage() {
     
     const link = document.createElement('a');
     link.href = audioUrl;
-    link.download = `audify-${Date.now()}.mp3`;
+    const ext = selectedFormat === 'ogg_vorbis' ? 'ogg' : 'mp3';
+    link.download = `audify-${Date.now()}.${ext}`;
     link.click();
   }
 
@@ -174,6 +191,32 @@ export default function DashboardPage() {
                 <div className="text-xs mt-2 text-purple-400">
                   {VOICE_CREDIT_MULTIPLIERS[engine === 'long-form' ? 'long_form' : engine]}x credits
                 </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Audio Format Selection */}
+        <div className="mb-6">
+          <label className="block text-gray-300 font-medium mb-2">
+            Audio Format
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.entries(FORMAT_LABELS).map(([format, { label, description, icon }]) => (
+              <button
+                key={format}
+                onClick={() => setSelectedFormat(format)}
+                className={`p-4 rounded-xl border transition-all text-left ${
+                  selectedFormat === format
+                    ? 'bg-purple-500/20 border-purple-500 text-white'
+                    : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/30'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{icon}</span>
+                  <span className="font-medium">{label}</span>
+                </div>
+                <div className="text-xs mt-1 opacity-70">{description}</div>
               </button>
             ))}
           </div>

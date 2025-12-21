@@ -40,7 +40,7 @@ export default function DashboardNav({ email, credits, isAdmin }: DashboardNavPr
               href="/dashboard/history" 
               className="text-gray-300 hover:text-white transition-colors"
             >
-              History
+              Library
             </Link>
             <Link 
               href="/dashboard/credits" 

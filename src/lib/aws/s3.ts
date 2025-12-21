@@ -68,6 +68,7 @@ export async function getPresignedUrl(key: string, expiresInSeconds: number = 36
   return getSignedUrl(getS3Client(), command, { expiresIn: expiresInSeconds });
 }
 
-export function generateAudioKey(userId: string, timestamp: number): string {
-  return `audio/${userId}/${timestamp}.mp3`;
+export function generateAudioKey(userId: string, timestamp: number, format: 'mp3' | 'ogg_vorbis' = 'mp3'): string {
+  const ext = format === 'ogg_vorbis' ? 'ogg' : 'mp3';
+  return `audio/${userId}/${timestamp}.${ext}`;
 }

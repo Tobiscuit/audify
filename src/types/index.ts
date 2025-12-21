@@ -33,6 +33,7 @@ export interface SynthesizeRequest {
   text: string;
   voiceId: string;
   engine: 'standard' | 'neural' | 'generative' | 'long-form';
+  outputFormat?: 'mp3' | 'ogg_vorbis';
 }
 
 // Synthesize response

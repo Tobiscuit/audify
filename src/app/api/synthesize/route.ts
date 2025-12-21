@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body: SynthesizeRequest = await request.json();
-    const { text, voiceId, engine } = body;
+    const { text, voiceId, engine, outputFormat } = body;
 
     if (!text || !voiceId || !engine) {
       return NextResponse.json(
@@ -88,14 +88,17 @@ export async function POST(request: NextRequest) {
       text,
       voiceId: voiceId as VoiceId,
       engine: engine as Engine,
+      outputFormat: (outputFormat as 'mp3' | 'ogg_vorbis') || 'mp3',
     });
 
     // Generate unique key for S3
     const timestamp = Date.now();
-    const s3Key = generateAudioKey(user.id, timestamp);
+    const format = (outputFormat as 'mp3' | 'ogg_vorbis') || 'mp3';
+    const s3Key = generateAudioKey(user.id, timestamp, format);
 
-    // Upload to S3
-    await uploadAudio(audioStream, s3Key);
+    // Upload to S3 with correct content type
+    const contentType = format === 'ogg_vorbis' ? 'audio/ogg' : 'audio/mpeg';
+    await uploadAudio(audioStream, s3Key, contentType);
 
     // Get presigned URL for playback
     const audioUrl = await getPresignedUrl(s3Key);
