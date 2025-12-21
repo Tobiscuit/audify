@@ -7,6 +7,7 @@ import type { Voice } from '@/types';
 interface ParsedSection {
   id: number;
   title: string;
+  level: number;
   charCount: number;
   preview: string;
 }
@@ -32,6 +33,7 @@ export default function BatchUploadPage() {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<GenerationResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [useAI, setUseAI] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Calculate estimated credits
@@ -72,6 +74,7 @@ export default function BatchUploadPage() {
     try {
       const formData = new FormData();
       formData.append('file', uploadedFile);
+      formData.append('useAI', useAI.toString());
 
       const res = await fetch('/api/batch/parse', {
         method: 'POST',
@@ -103,9 +106,9 @@ export default function BatchUploadPage() {
     setResults([]);
 
     try {
-      // Get full section content from parse response (stored in sessionStorage or refetch)
       const formData = new FormData();
       formData.append('file', file!);
+      formData.append('useAI', useAI.toString());
 
       const parseRes = await fetch('/api/batch/parse', {
         method: 'POST',
@@ -232,6 +235,48 @@ export default function BatchUploadPage() {
 
             {sections.length > 0 && (
               <>
+                {/* Detection Mode Toggle */}
+                <div className="bg-white/5 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-white font-medium">Detection Mode</span>
+                    <p className="text-gray-400 text-sm">
+                      {useAI ? 'AI-powered (Nova 2 Lite ~$0.02)' : 'Pattern matching (Free)'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newMode = !useAI;
+                      setUseAI(newMode);
+                      // Re-parse with new mode
+                      if (file) {
+                        setParsing(true);
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('useAI', newMode.toString());
+                        try {
+                          const res = await fetch('/api/batch/parse', {
+                            method: 'POST',
+                            body: formData,
+                          });
+                          const data = await res.json();
+                          if (res.ok) {
+                            setSections(data.sections);
+                            setSelectedSections(new Set(data.sections.map((s: ParsedSection) => s.id)));
+                          }
+                        } catch (e) {}
+                        setParsing(false);
+                      }
+                    }}
+                    className={`relative w-14 h-8 rounded-full transition-colors ${
+                      useAI ? 'bg-purple-500' : 'bg-gray-600'
+                    }`}
+                  >
+                    <div className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-transform ${
+                      useAI ? 'translate-x-7' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
                 {/* Section List */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between mb-4">
@@ -258,8 +303,11 @@ export default function BatchUploadPage() {
                           onChange={() => toggleSection(section.id)}
                           className="mt-1"
                         />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-white font-medium truncate">{section.title}</div>
+                        <div className="flex-1 min-w-0" style={{ marginLeft: `${((section.level || 1) - 1) * 16}px` }}>
+                          <div className="text-white font-medium truncate">
+                            {section.level > 1 && <span className="text-gray-500 mr-2">{'└─'}</span>}
+                            {section.title}
+                          </div>
                           <div className="text-gray-400 text-sm truncate">{section.preview}</div>
                           <div className="text-gray-500 text-xs mt-1">{section.charCount.toLocaleString()} chars</div>
                         </div>
