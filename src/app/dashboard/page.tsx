@@ -38,6 +38,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [creditsUsed, setCreditsUsed] = useState<number>(0);
   const [selectedFormat, setSelectedFormat] = useState<string>('mp3');
+  const [previewing, setPreviewing] = useState(false);
+  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Calculate estimated credits
@@ -230,20 +232,78 @@ export default function DashboardPage() {
           {loading ? (
             <div className="text-gray-400">Loading voices...</div>
           ) : (
-            <select
-              value={selectedVoice?.voiceId || ''}
-              onChange={(e) => {
-                const voice = filteredVoices.find(v => v.voiceId === e.target.value);
-                setSelectedVoice(voice || null);
-              }}
-              className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              {filteredVoices.map((voice) => (
-                <option key={voice.voiceId} value={voice.voiceId} className="bg-gray-900">
-                  {voice.name} ({voice.languageName}) - {voice.gender}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-3">
+              <select
+                value={selectedVoice?.voiceId || ''}
+                onChange={(e) => {
+                  const voice = filteredVoices.find(v => v.voiceId === e.target.value);
+                  setSelectedVoice(voice || null);
+                }}
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                {filteredVoices.map((voice) => (
+                  <option key={voice.voiceId} value={voice.voiceId} className="bg-gray-900">
+                    {voice.name} ({voice.languageName}) - {voice.gender}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={async () => {
+                  if (!selectedVoice || previewing) return;
+                  setPreviewing(true);
+                  
+                  // Stop any existing preview
+                  if (previewAudio) {
+                    previewAudio.pause();
+                    previewAudio.src = '';
+                  }
+                  
+                  try {
+                    const res = await fetch('/api/preview', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        voiceId: selectedVoice.voiceId,
+                        engine: selectedEngine,
+                      }),
+                    });
+                    
+                    if (res.ok) {
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const audio = new Audio(url);
+                      setPreviewAudio(audio);
+                      audio.onended = () => setPreviewing(false);
+                      audio.play();
+                    }
+                  } catch (err) {
+                    console.error('Preview failed:', err);
+                  } finally {
+                    setPreviewing(false);
+                  }
+                }}
+                disabled={!selectedVoice || previewing}
+                className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 px-4 py-3 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+                title="Preview voice"
+              >
+                {previewing ? (
+                  <>
+                    <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="6" y="4" width="4" height="16" rx="1" />
+                      <rect x="14" y="4" width="4" height="16" rx="1" />
+                    </svg>
+                    <span className="hidden sm:inline">Playing...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    <span className="hidden sm:inline">Preview</span>
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
 
