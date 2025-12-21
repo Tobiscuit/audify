@@ -28,21 +28,40 @@ const FORMAT_LABELS: Record<string, { label: string; description: string; icon: 
 };
 
 export default function DashboardPage() {
+  // Input mode: 'type' or 'upload'
+  const [inputMode, setInputMode] = useState<'type' | 'upload'>('upload');
+  const [useAI, setUseAI] = useState(false);
+  
+  // Text mode states
   const [text, setText] = useState('');
+  
+  // File upload mode states
+  const [file, setFile] = useState<File | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [sections, setSections] = useState<Array<{id: number; title: string; level: number; charCount: number; preview: string}>>([]);
+  const [selectedSections, setSelectedSections] = useState<Set<number>>(new Set());
+  
+  // Voice settings
   const [voices, setVoices] = useState<Voice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null);
   const [selectedEngine, setSelectedEngine] = useState<string>('generative');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('en-US');
+  const [selectedFormat, setSelectedFormat] = useState<string>('mp3');
+  
+  // Generation states
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creditsUsed, setCreditsUsed] = useState<number>(0);
-  const [selectedFormat, setSelectedFormat] = useState<string>('mp3');
+  
+  // Preview states
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('en-US');
+  
   const audioRef = useRef<HTMLAudioElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Calculate estimated credits
   const charCount = text.length;
@@ -127,6 +146,48 @@ export default function DashboardPage() {
     link.click();
   }
 
+  async function handleFileUpload(uploadedFile: File) {
+    setFile(uploadedFile);
+    setParsing(true);
+    setError(null);
+    setSections([]);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+      formData.append('useAI', useAI.toString());
+
+      const res = await fetch('/api/batch/parse', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to parse file');
+        return;
+      }
+
+      setSections(data.sections);
+      setSelectedSections(new Set(data.sections.map((s: {id: number}) => s.id)));
+    } catch (err) {
+      setError('Failed to upload file');
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function toggleSection(id: number) {
+    const newSelected = new Set(selectedSections);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedSections(newSelected);
+  }
+
   const availableEngines = selectedVoice 
     ? selectedVoice.engines 
     : ['standard', 'neural', 'generative', 'long-form'];
@@ -139,6 +200,12 @@ export default function DashboardPage() {
   
   // Filter voices by engine AND language
   const filteredVoices = engineVoices.filter(v => v.languageCode === selectedLanguage);
+
+  // Calculate total chars for file mode
+  const totalSectionChars = sections
+    .filter(s => selectedSections.has(s.id))
+    .reduce((sum, s) => sum + s.charCount, 0);
+  const fileEstimatedCredits = totalSectionChars * multiplier;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -153,33 +220,161 @@ export default function DashboardPage() {
       <div className="lg:col-span-3 order-1 lg:order-2 space-y-8">
         {/* Header */}
         <div className="text-center">
-        <h1 className="text-3xl font-bold text-white mb-2">
-          Generate Audio
-        </h1>
-        <p className="text-gray-400">
-          Enter your text and choose a voice to create natural-sounding audio
-        </p>
-      </div>
+          <h1 className="text-3xl font-bold text-white mb-2">
+            Generate Audio
+          </h1>
+          <p className="text-gray-400">
+            Upload a file or type text to create natural-sounding audio
+          </p>
+        </div>
 
       {/* Main Card */}
       <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/10">
-        {/* Text Input */}
-        <div className="mb-6">
-          <label className="block text-gray-300 font-medium mb-2">
-            Your Text
-          </label>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Enter the text you want to convert to speech..."
-            rows={6}
-            className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-          />
-          <div className="flex justify-between mt-2 text-sm text-gray-400">
-            <span>{charCount.toLocaleString()} characters</span>
-            <span>Estimated: {estimatedCredits.toLocaleString()} credits</span>
+        {/* Input Mode Tabs + AI Toggle */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setInputMode('upload')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                inputMode === 'upload'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-white/10 text-gray-400 hover:text-white'
+              }`}
+            >
+              📁 Upload File
+            </button>
+            <button
+              onClick={() => setInputMode('type')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                inputMode === 'type'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-white/10 text-gray-400 hover:text-white'
+              }`}
+            >
+              ✏️ Type Text
+            </button>
+          </div>
+          
+          {/* AI Detection Toggle */}
+          <div className="flex items-center gap-3">
+            <span className="text-gray-400 text-sm">
+              {useAI ? '🤖 AI Detection' : '📋 Pattern Detection'}
+            </span>
+            <button
+              onClick={() => setUseAI(!useAI)}
+              className={`relative w-12 h-6 rounded-full transition-colors ${
+                useAI ? 'bg-purple-500' : 'bg-gray-600'
+              }`}
+            >
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                useAI ? 'translate-x-7' : 'translate-x-1'
+              }`} />
+            </button>
           </div>
         </div>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.md,.pdf"
+          onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+          className="hidden"
+        />
+
+        {/* Conditional Input Area */}
+        {inputMode === 'upload' ? (
+          <div className="mb-6">
+            {!file ? (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-12 border-2 border-dashed border-white/20 rounded-2xl hover:border-purple-500/50 transition-colors"
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-4">📄</div>
+                  <div className="text-white font-medium mb-2">Drop a file or click to upload</div>
+                  <div className="text-gray-400 text-sm">Supports .txt, .md, and .pdf files</div>
+                  {useAI && <div className="text-purple-400 text-sm mt-2">AI detection enabled (~$0.015/page for PDFs)</div>}
+                </div>
+              </button>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📄</span>
+                    <div>
+                      <div className="text-white font-medium">{file.name}</div>
+                      <div className="text-gray-400 text-sm">{sections.length} sections • {fileEstimatedCredits.toLocaleString()} credits</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setFile(null); setSections([]); }}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                {parsing && (
+                  <div className="text-center py-4">
+                    <div className="animate-spin w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                    <div className="text-gray-400 text-sm">Analyzing document...</div>
+                  </div>
+                )}
+
+                {sections.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto space-y-2">
+                    {sections.map((section) => (
+                      <label
+                        key={section.id}
+                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                          selectedSections.has(section.id)
+                            ? 'bg-purple-500/10 border-purple-500/30'
+                            : 'bg-white/5 border-white/10'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSections.has(section.id)}
+                          onChange={() => toggleSection(section.id)}
+                          className="mt-1"
+                        />
+                        <div className="flex-1 min-w-0" style={{ marginLeft: `${(section.level - 1) * 12}px` }}>
+                          <div className="text-white font-medium truncate text-sm">
+                            {section.level > 1 && <span className="text-gray-500 mr-1">└</span>}
+                            {section.title}
+                          </div>
+                          <div className="text-gray-500 text-xs">{section.charCount.toLocaleString()} chars</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {sections.length === 0 && !parsing && (
+                  <div className="text-center py-4 text-gray-400">
+                    No sections detected. Try enabling AI detection for better results.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Text Input Mode */
+          <div className="mb-6">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Enter the text you want to convert to speech..."
+              rows={6}
+              className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+            />
+            <div className="flex justify-between mt-2 text-sm text-gray-400">
+              <span>{charCount.toLocaleString()} characters</span>
+              <span>Estimated: {estimatedCredits.toLocaleString()} credits</span>
+            </div>
+          </div>
+        )}
 
         {/* Voice Type Selection */}
         <div className="mb-6">
