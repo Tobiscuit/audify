@@ -39,7 +39,9 @@ export default function DashboardPage() {
   const [creditsUsed, setCreditsUsed] = useState<number>(0);
   const [selectedFormat, setSelectedFormat] = useState<string>('mp3');
   const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('en-US');
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Calculate estimated credits
@@ -129,7 +131,14 @@ export default function DashboardPage() {
     ? selectedVoice.engines 
     : ['standard', 'neural', 'generative', 'long-form'];
 
-  const filteredVoices = voices.filter(v => v.engines?.includes(selectedEngine));
+  // Get unique languages from voices
+  const languages = [...new Set(voices.map(v => v.languageCode))].sort();
+  
+  // Filter voices by engine AND language
+  const filteredVoices = voices.filter(v => 
+    v.engines?.includes(selectedEngine) && 
+    v.languageCode === selectedLanguage
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -224,10 +233,28 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Language Selection */}
+        <div className="mb-6">
+          <label className="block text-gray-300 font-medium mb-2">
+            Language
+          </label>
+          <select
+            value={selectedLanguage}
+            onChange={(e) => setSelectedLanguage(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            {languages.map((lang) => (
+              <option key={lang} value={lang} className="bg-gray-900">
+                {lang}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Voice Selection */}
         <div className="mb-6">
           <label className="block text-gray-300 font-medium mb-2">
-            Voice
+            Voice ({filteredVoices.length} available)
           </label>
           {loading ? (
             <div className="text-gray-400">Loading voices...</div>
@@ -273,12 +300,20 @@ export default function DashboardPage() {
                       const url = URL.createObjectURL(blob);
                       const audio = new Audio(url);
                       setPreviewAudio(audio);
+                      setPreviewError(null);
                       audio.onended = () => setPreviewing(false);
-                      audio.play();
+                      audio.onerror = () => {
+                        setPreviewError('Failed to play audio');
+                        setPreviewing(false);
+                      };
+                      await audio.play();
+                    } else {
+                      setPreviewError('Preview generation failed');
+                      setPreviewing(false);
                     }
                   } catch (err) {
                     console.error('Preview failed:', err);
-                  } finally {
+                    setPreviewError('Preview failed');
                     setPreviewing(false);
                   }
                 }}
