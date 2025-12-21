@@ -187,7 +187,7 @@ export default function BatchUploadPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".txt,.md"
+          accept=".txt,.md,.pdf"
           onChange={handleFileUpload}
           className="hidden"
         />
@@ -200,7 +200,7 @@ export default function BatchUploadPage() {
             <div className="text-center">
               <div className="text-4xl mb-4">📄</div>
               <div className="text-white font-medium mb-2">Drop a file or click to upload</div>
-              <div className="text-gray-400 text-sm">Supports .txt and .md files</div>
+              <div className="text-gray-400 text-sm">Supports .txt, .md, and .pdf files</div>
             </div>
           </button>
         ) : (

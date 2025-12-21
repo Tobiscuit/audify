@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { extractFromPDFWithTextract, extractTextFromPDF } from '@/lib/aws/textract';
 
 interface HierarchicalSection {
   id: number;
@@ -212,20 +213,53 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    const text = await file.text();
-
-    if (!text.trim()) {
-      return NextResponse.json({ error: 'File is empty' }, { status: 400 });
-    }
-
+    const fileName = file.name.toLowerCase();
+    const isPDF = fileName.endsWith('.pdf');
+    let text: string;
     let sections: FlatSection[];
 
-    if (useAI) {
-      // TODO: Implement Nova 2 Lite AI detection
-      // For now, fall back to regex
-      sections = detectHierarchicalSections(text);
+    if (isPDF) {
+      // Handle PDF files
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      if (useAI) {
+        // Use Textract for AI mode (layout detection)
+        try {
+          const result = await extractFromPDFWithTextract(buffer);
+          text = result.text;
+          // Convert Textract sections to FlatSection format
+          sections = result.sections.map((s, i) => ({
+            id: i,
+            title: s.title,
+            level: s.level,
+            charCount: s.charCount,
+            preview: s.content.slice(0, 100) + (s.content.length > 100 ? '...' : ''),
+            content: s.content,
+          }));
+        } catch (error) {
+          console.error('Textract error, falling back to pdf-parse:', error);
+          text = await extractTextFromPDF(buffer);
+          sections = detectHierarchicalSections(text);
+        }
+      } else {
+        // Use pdf-parse for free mode
+        text = await extractTextFromPDF(buffer);
+        sections = detectHierarchicalSections(text);
+      }
     } else {
+      // Handle text files (.txt, .md)
+      text = await file.text();
+
+      if (!text.trim()) {
+        return NextResponse.json({ error: 'File is empty' }, { status: 400 });
+      }
+
       sections = detectHierarchicalSections(text);
+    }
+
+    if (!text.trim()) {
+      return NextResponse.json({ error: 'Could not extract text from file' }, { status: 400 });
     }
 
     // Split any sections that exceed maxChars
