@@ -27,7 +27,82 @@ export async function GET() {
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
     if (isAdmin) {
-      // Admin: Show usage against AWS free tier limits (all users combined for this AWS account)
+      // Admin: Fetch actual usage from AWS CloudWatch (Source of Truth)
+      const { CloudWatchClient, GetMetricStatisticsCommand } = await import('@aws-sdk/client-cloudwatch');
+      
+      const cwClient = new CloudWatchClient({
+        region: process.env.AWS_REGION || 'us-east-1',
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        },
+      });
+
+      // Get usage for each engine type
+      // Note: CloudWatch metrics for Polly are standard, neural, etc.
+      const engines = ['standard', 'neural', 'long-form', 'generative'];
+      const usageByType: Record<string, number> = {};
+
+      await Promise.all(engines.map(async (engine) => {
+        try {
+          // Map our engine names to AWS Dimension values if needed
+          // AWS uses: 'Standard', 'Neural', 'LongForm', 'Generative' (Title Case)
+          const awsEngineValue = engine === 'long-form' 
+            ? 'LongForm' 
+            : engine.charAt(0).toUpperCase() + engine.slice(1);
+
+          const command = new GetMetricStatisticsCommand({
+            Namespace: 'AWS/Polly',
+            MetricName: 'SynthesizedCharacters',
+            Dimensions: [
+              { Name: 'LanguageCode', Value: 'en-US' }, // Optional: track all or specific
+              // Actually, simply tracking by Operation is better, but Polly splits by VoiceId or generic
+              // Let's try to get aggregate sum first.
+              // Update: Polly metrics are sparse. Let's try to get ALL 'SynthesizedCharacters' first.
+            ],
+            StartTime: monthStart,
+            EndTime: now,
+            Period: 2592000, // 30 days coverage
+            Statistics: ['Sum'],
+          });
+
+          // BETTER STRATEGY: 
+          // Polly doesn't always publish per-engine metrics easily without specific dimensions.
+          // Let's rely on the fact that we can filter by the 'Operation' dimension if needed, 
+          // or just assume the DB usage is a good "baseline" and we add CLI usage if we can find it.
+          //
+          // ACTUALLY: Let's query effectively.
+          // AWS Polly metrics usually require: { Name: 'Operation', Value: 'SynthesizeSpeech' }
+          
+        } catch (e) {
+          console.error(`Failed to fetch CW for ${engine}`, e);
+        }
+      }));
+      
+      // RE-STRATEGY: Querying CloudWatch for specific breakdown is complex because dimensions must generally match EXACTLY.
+      // If you just want "Total Characters", that's easier.
+      // 
+      // Let's implement a simplified CloudWatch query for "Total SynthesizedCharacters" 
+      // We often can't easily split by Engine without defining that dimension in the metric yourself,
+      // UNLESS AWS publishes it by default.
+      //
+      // According to docs, Polly publishes:
+      // - SynthesizedCharacters (Dimensions: None [Global], or Operation)
+      
+      // Let's fetch the Global sum first.
+      const command = new GetMetricStatisticsCommand({
+         Namespace: 'AWS/Polly',
+         MetricName: 'SynthesizedCharacters',
+         StartTime: monthStart,
+         EndTime: now,
+         Period: 2592000, 
+         Statistics: ['Sum'],
+      });
+      
+      const response = await cwClient.send(command);
+      const totalAwsChars = response.Datapoints?.[0]?.Sum || 0;
+
+      // Now fetch our DB usage to break it down (since CloudWatch might not give granular engine breakdown easily)
       const { data: usageData, error: usageError } = await supabase
         .from('usage_history')
         .select('voice_type, char_count')
@@ -38,22 +113,49 @@ export async function GET() {
         return NextResponse.json({ error: 'Failed to fetch usage' }, { status: 500 });
       }
 
-      // Aggregate by voice type
-      const usageByType: Record<string, number> = {
+      // Aggregate DB usage
+      const dbUsageByType: Record<string, number> = {
         standard: 0,
         neural: 0,
         long_form: 0,
         generative: 0,
       };
 
+      let totalDbChars = 0;
       for (const record of usageData || []) {
         const voiceType = record.voice_type || 'standard';
-        usageByType[voiceType] = (usageByType[voiceType] || 0) + (record.char_count || 0);
+        dbUsageByType[voiceType] = (dbUsageByType[voiceType] || 0) + (record.char_count || 0);
+        totalDbChars += (record.char_count || 0);
       }
 
-      return NextResponse.json({
-        type: 'admin',
-        usage: Object.entries(usageByType).map(([voiceType, used]) => ({
+      // RECONCILIATION:
+      // If AWS shows MORE than DB, the difference is likely CLI/Console usage.
+      // We'll attribute the difference to "standard" or just mark it separately?
+      // For now, let's just update the totals to match AWS if AWS > DB.
+      // Actually, distributing the "unknown" usage is tricky. 
+      // Let's just trust AWS for the TOTAL and trust DB for the RATIO, 
+      // or simply show "Unknown/CLI" for the difference.
+      
+      const difference = Math.max(0, totalAwsChars - totalDbChars);
+      
+      // If difference exist, add it to 'standard' or a new category. 
+      // Let's add it to 'standard' for safety (lowest tier) or 'neural' (most common). 
+      // Or simply display what we know.
+      
+      // Let's be smart: Update the "Unknown/External" usage
+      // usageByType['external'] = difference;
+      
+      // For the UI to work, we need to map back to the expected structure.
+      // Let's just return the DB data mixed with the total check?
+      
+      // SIMPLIFICATION for V1: Just use the DB data but log the AWS total for verification.
+      // If the user WANTS the AWS data to drive the limits:
+      
+      // Update DB counts with a multiplier if AWS is higher? No that's hacky.
+      // Let's add 'External/CLI' row if difference > 1000 chars.
+      
+      const finalUsage = [
+        ...Object.entries(dbUsageByType).map(([voiceType, used]) => ({
           voiceType,
           used,
           limit: FREE_TIER_LIMITS[voiceType] || 0,
@@ -61,11 +163,28 @@ export async function GET() {
           percentUsed: FREE_TIER_LIMITS[voiceType] 
             ? Math.round((used / FREE_TIER_LIMITS[voiceType]) * 100) 
             : 0,
-        })),
+        }))
+      ];
+      
+      if (difference > 1000) {
+        finalUsage.push({
+           voiceType: 'External (CLI/Console)',
+           used: difference,
+           limit: 0, // No specific limit, counts against total really
+           remaining: 0,
+           percentUsed: 0
+        });
+      }
+
+      return NextResponse.json({
+        type: 'admin',
+        usage: finalUsage,
         period: {
           start: monthStart.toISOString(),
           end: monthEnd.toISOString(),
         },
+        awsTotal: totalAwsChars, // Send this for visibility
+        dbTotal: totalDbChars
       });
     } else {
       // Regular user: Show credit balance and this month's usage
