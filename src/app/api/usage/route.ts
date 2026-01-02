@@ -89,7 +89,32 @@ export async function GET() {
       // According to docs, Polly publishes:
       // - SynthesizedCharacters (Dimensions: None [Global], or Operation)
       
-      // Let's fetch the Global sum first.
+      // DEBUG: List available metrics to verify dimensions
+      const { ListMetricsCommand } = await import('@aws-sdk/client-cloudwatch');
+      const listCmd = new ListMetricsCommand({
+        Namespace: 'AWS/Polly',
+        MetricName: 'SynthesizedCharacters',
+      });
+      const listMetrics = await cwClient.send(listCmd);
+      const availableMetrics = listMetrics.Metrics || [];
+
+      // Fetch usage for PREVIOUS month too, just to check
+      const prevMonthStart = new Date(monthStart);
+      prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
+      
+      const debugCommand = new GetMetricStatisticsCommand({
+         Namespace: 'AWS/Polly',
+         MetricName: 'SynthesizedCharacters',
+         StartTime: prevMonthStart,
+         EndTime: now,
+         Period: 86400, // Daily buckets
+         Statistics: ['Sum'],
+      });
+      
+      const debugResponse = await cwClient.send(debugCommand);
+      const debugDatapoints = debugResponse.Datapoints?.sort((a, b) => (b.Timestamp?.getTime() || 0) - (a.Timestamp?.getTime() || 0)) || [];
+
+      // Original query for THIS month total
       const command = new GetMetricStatisticsCommand({
          Namespace: 'AWS/Polly',
          MetricName: 'SynthesizedCharacters',
@@ -102,6 +127,8 @@ export async function GET() {
       const response = await cwClient.send(command);
       const totalAwsChars = response.Datapoints?.[0]?.Sum || 0;
 
+      // ... (existing DB fetch) ... (omitted for brevity, keep existing flow down to return)
+
       // Now fetch our DB usage to break it down (since CloudWatch might not give granular engine breakdown easily)
       const { data: usageData, error: usageError } = await supabase
         .from('usage_history')
@@ -113,7 +140,6 @@ export async function GET() {
         return NextResponse.json({ error: 'Failed to fetch usage' }, { status: 500 });
       }
 
-      // Aggregate DB usage
       const dbUsageByType: Record<string, number> = {
         standard: 0,
         neural: 0,
@@ -127,33 +153,9 @@ export async function GET() {
         dbUsageByType[voiceType] = (dbUsageByType[voiceType] || 0) + (record.char_count || 0);
         totalDbChars += (record.char_count || 0);
       }
-
-      // RECONCILIATION:
-      // If AWS shows MORE than DB, the difference is likely CLI/Console usage.
-      // We'll attribute the difference to "standard" or just mark it separately?
-      // For now, let's just update the totals to match AWS if AWS > DB.
-      // Actually, distributing the "unknown" usage is tricky. 
-      // Let's just trust AWS for the TOTAL and trust DB for the RATIO, 
-      // or simply show "Unknown/CLI" for the difference.
       
       const difference = Math.max(0, totalAwsChars - totalDbChars);
-      
-      // If difference exist, add it to 'standard' or a new category. 
-      // Let's add it to 'standard' for safety (lowest tier) or 'neural' (most common). 
-      // Or simply display what we know.
-      
-      // Let's be smart: Update the "Unknown/External" usage
-      // usageByType['external'] = difference;
-      
-      // For the UI to work, we need to map back to the expected structure.
-      // Let's just return the DB data mixed with the total check?
-      
-      // SIMPLIFICATION for V1: Just use the DB data but log the AWS total for verification.
-      // If the user WANTS the AWS data to drive the limits:
-      
-      // Update DB counts with a multiplier if AWS is higher? No that's hacky.
-      // Let's add 'External/CLI' row if difference > 1000 chars.
-      
+
       const finalUsage = [
         ...Object.entries(dbUsageByType).map(([voiceType, used]) => ({
           voiceType,
@@ -170,7 +172,7 @@ export async function GET() {
         finalUsage.push({
            voiceType: 'External (CLI/Console)',
            used: difference,
-           limit: 0, // No specific limit, counts against total really
+           limit: 0, 
            remaining: 0,
            percentUsed: 0
         });
@@ -183,8 +185,13 @@ export async function GET() {
           start: monthStart.toISOString(),
           end: monthEnd.toISOString(),
         },
-        awsTotal: totalAwsChars, // Send this for visibility
-        dbTotal: totalDbChars
+        awsTotal: totalAwsChars,
+        dbTotal: totalDbChars,
+        debug: {
+          availableMetrics: availableMetrics.length,
+          metrics: availableMetrics,
+          last30DaysDatapoints: debugDatapoints,
+        }
       });
     } else {
       // Regular user: Show credit balance and this month's usage

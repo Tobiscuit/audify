@@ -121,6 +121,32 @@ export default function UsageWidget() {
         <p className="text-xs text-gray-500 mt-4">
           Free tier: 12 months from first Polly request
         </p>
+
+        {/* Debug Info */}
+        <div className="mt-4 pt-4 border-t border-white/10 text-xs font-mono text-gray-400">
+          <p className="font-bold text-gray-300 mb-2">Debug Info:</p>
+          <div className="space-y-1">
+            <p>AWS Total: {usage.awsTotal?.toLocaleString() ?? '?'}</p>
+            <p>DB Total: {usage.dbTotal?.toLocaleString() ?? '?'}</p>
+            <p>Metrics Found: {usage.debug?.availableMetrics ?? 0}</p>
+            <details>
+              <summary className="cursor-pointer hover:text-white">Raw Metrics ({usage.debug?.metrics?.length})</summary>
+              <pre className="mt-2 p-2 bg-black/30 rounded overflow-auto max-h-40">
+                {JSON.stringify(usage.debug?.metrics, null, 2)}
+              </pre>
+            </details>
+            <details>
+              <summary className="cursor-pointer hover:text-white">Daily Datapoints ({usage.debug?.last30DaysDatapoints?.length})</summary>
+              <div className="mt-2 space-y-1">
+                {usage.debug?.last30DaysDatapoints?.map((dp: any, i: number) => (
+                  <p key={i}>
+                    {new Date(dp.Timestamp).toLocaleDateString()}: {dp.Sum?.toLocaleString()} chars
+                  </p>
+                ))}
+              </div>
+            </details>
+          </div>
+        </div>
       </div>
     );
   }
