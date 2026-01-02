@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getPresignedUrl } from '@/lib/aws/s3';
-import HistoryClient from './HistoryClient';
+import LibraryClient from './LibraryClient';
 
-export default async function HistoryPage() {
+export default async function LibraryPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -11,7 +11,7 @@ export default async function HistoryPage() {
     redirect('/login');
   }
 
-  // Fetch user's usage history
+  // Fetch user's usage history (still keeping table name usage_history for now)
   const { data: history, error } = await supabase
     .from('usage_history')
     .select('*')
@@ -34,11 +34,11 @@ export default async function HistoryPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Generation History</h1>
-        <p className="text-gray-400">Your past audio generations</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Audio Library</h1>
+        <p className="text-gray-400">Your generated audio files</p>
       </div>
 
-      <HistoryClient history={historyWithUrls} />
+      <LibraryClient history={historyWithUrls} />
     </div>
   );
 }

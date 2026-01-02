@@ -40,14 +40,14 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-export default function HistoryClient({ history }: HistoryClientProps) {
+export default function LibraryClient({ history }: HistoryClientProps) {
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   if (history.length === 0) {
     return (
       <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-12 border border-white/10 text-center">
         <div className="text-6xl mb-4">🎙️</div>
-        <h2 className="text-xl font-semibold text-white mb-2">No history yet</h2>
+        <h2 className="text-xl font-semibold text-white mb-2">No audio yet</h2>
         <p className="text-gray-400">
           Generate your first audio to see it here!
         </p>

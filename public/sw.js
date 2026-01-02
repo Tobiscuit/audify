@@ -35,6 +35,9 @@ self.addEventListener('fetch', (event) => {
   // Skip API requests (don't cache)
   if (event.request.url.includes('/api/')) return;
 
+  // Skip non-http/https schemes (e.g. chrome-extension://)
+  if (!event.request.url.startsWith('http')) return;
+
   // Network-first strategy for HTML pages
   if (event.request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(

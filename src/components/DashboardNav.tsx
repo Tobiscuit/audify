@@ -37,7 +37,7 @@ export default function DashboardNav({ email, credits, isAdmin }: DashboardNavPr
               Generate
             </Link>
             <Link 
-              href="/dashboard/history" 
+              href="/dashboard/library" 
               className="text-gray-300 hover:text-white transition-colors"
             >
               Library
