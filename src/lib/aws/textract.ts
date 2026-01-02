@@ -132,8 +132,10 @@ export async function extractFromPDFWithTextract(pdfBuffer: Buffer): Promise<{
 // Simple text extraction (fallback for non-Textract)
 // Uses unpdf - serverless-compatible with zero native dependencies
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
-  const { extractText } = await import('unpdf');
-  const { text } = await extractText(pdfBuffer);
-  // text is a string[] (one per page), join into single string
-  return Array.isArray(text) ? text.join('\n') : text;
+  const { extractText, getDocumentProxy } = await import('unpdf');
+  // Convert Buffer to Uint8Array and load PDF
+  const pdf = await getDocumentProxy(new Uint8Array(pdfBuffer));
+  // Extract text with pages merged
+  const { text } = await extractText(pdf, { mergePages: true });
+  return text;
 }
