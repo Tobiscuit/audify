@@ -239,7 +239,14 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex gap-2">
             <button
-              onClick={() => setInputMode('upload')}
+              onClick={() => {
+                if (inputMode === 'upload') {
+                  // Already in upload mode - open file picker
+                  fileInputRef.current?.click();
+                } else {
+                  setInputMode('upload');
+                }
+              }}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                 inputMode === 'upload'
                   ? 'bg-purple-500 text-white'
