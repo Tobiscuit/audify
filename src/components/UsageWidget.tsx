@@ -12,6 +12,13 @@ interface AdminUsage {
     percentUsed: number;
   }>;
   period: { start: string; end: string };
+  awsTotal?: number;
+  dbTotal?: number;
+  debug?: {
+    availableMetrics: number;
+    metrics: any[];
+    last30DaysDatapoints: any[];
+  };
 }
 
 interface UserUsage {
