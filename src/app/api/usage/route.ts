@@ -142,6 +142,14 @@ export async function GET() {
       let nextToken: string | undefined;
       const asyncTasksFound = [];
 
+      // Async bucket by engine
+      const asyncUsageByEngine: Record<string, number> = {
+         standard: 0,
+         neural: 0,
+         long_form: 0,
+         generative: 0,
+      };
+
       try {
         do {
           const listParams: any = { 
@@ -154,14 +162,31 @@ export async function GET() {
           if (listRes.SynthesisTasks) {
             for (const task of listRes.SynthesisTasks) {
               const taskDate = task.CreationTime;
+              const engine = task.Engine || 'standard'; // Default to standard if missing
+              const chars = task.RequestCharacters || 0;
+
               // Filter for tasks in Current Month
               if (taskDate && taskDate >= monthStart && taskDate <= monthEnd) {
                  if (task.TaskStatus === 'completed') {
-                    asyncTaskChars += (task.RequestCharacters || 0);
+                    asyncTaskChars += chars;
+                    
+                    // Map generic engine strings to our keys if needed
+                    // Polly returns: 'standard' | 'neural' | 'long-form' | 'generative'
+                    // Our keys match exactly mostly.
+                    const key = engine === 'long-form' ? 'long_form' : engine;
+                    
+                    if (asyncUsageByEngine[key] !== undefined) {
+                        asyncUsageByEngine[key] += chars;
+                    } else {
+                        // Fallback for unknown engines
+                        asyncUsageByEngine['standard'] += chars;
+                    }
+
                     asyncTasksFound.push({
                       id: task.TaskId,
-                      chars: task.RequestCharacters,
-                      date: taskDate
+                      chars: chars,
+                      date: taskDate,
+                      engine: engine
                     });
                  }
               }
@@ -179,6 +204,7 @@ export async function GET() {
       const debugInfo = {
         cwSyncChars,
         asyncTaskChars,
+        asyncUsageByEngine,
         asyncTasksFound: asyncTasksFound.length,
         metrics: availableMetrics,
         last30DaysDatapoints: debugDatapoints
@@ -212,9 +238,12 @@ export async function GET() {
       }
       
       // ATTRIBUTION LOGIC:
-      // 1. Add known Long-Form Async tasks to 'long_form' bucket
-      //    (Since our DB doesn't know about them, but we found them via API)
-      dbUsageByType['long_form'] += asyncTaskChars;
+      // 1. Add known Async tasks to their respective buckets
+      Object.entries(asyncUsageByEngine).forEach(([eng, count]) => {
+          if (dbUsageByType[eng] !== undefined) {
+              dbUsageByType[eng] += count;
+          }
+      });
 
       // 2. Reconciliation for Sync usage
       //    If CloudWatch Sync > DB (Standard+Neural+Gen), attibute diff to 'neural' (safest bet) or 'standard'
