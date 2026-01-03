@@ -102,7 +102,7 @@ export default function UsageWidget() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">AWS Free Tier Usage</h3>
           <span className="text-xs text-gray-400">
-            {new Date(usage.period.start).toLocaleDateString('en-US', { month: 'short' })}
+            {new Date(usage.period.start).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}
           </span>
         </div>
         <div className="space-y-4">
@@ -111,7 +111,8 @@ export default function UsageWidget() {
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-300">{VOICE_TYPE_LABELS[item.voiceType] || item.voiceType}</span>
                 <span className="text-gray-400">
-                  {formatNumber(item.used)} / {formatNumber(item.limit)}
+                  {formatNumber(item.used)}
+                  {item.limit > 0 && ` / ${formatNumber(item.limit)}`}
                 </span>
               </div>
               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
