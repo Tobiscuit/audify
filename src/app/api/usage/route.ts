@@ -186,7 +186,7 @@ export async function GET() {
 
       // ... (existing DB fetch) ... (omitted for brevity, keep existing flow down to return)
 
-      // Now fetch our DB usage to break it down (since CloudWatch might not give granular engine breakdown easily)
+      // Now fetch our DB usage to break it down 
       const { data: usageData, error: usageError } = await supabase
         .from('usage_history')
         .select('voice_type, char_count')
@@ -211,8 +211,22 @@ export async function GET() {
         totalDbChars += (record.char_count || 0);
       }
       
-      const difference = Math.max(0, totalAwsChars - totalDbChars);
+      // ATTRIBUTION LOGIC:
+      // 1. Add known Long-Form Async tasks to 'long_form' bucket
+      //    (Since our DB doesn't know about them, but we found them via API)
+      dbUsageByType['long_form'] += asyncTaskChars;
 
+      // 2. Reconciliation for Sync usage
+      //    If CloudWatch Sync > DB (Standard+Neural+Gen), attibute diff to 'neural' (safest bet) or 'standard'
+      const dbSyncTotal = dbUsageByType['standard'] + dbUsageByType['neural'] + dbUsageByType['generative'];
+      const syncDiff = Math.max(0, cwSyncChars - dbSyncTotal);
+      
+      if (syncDiff > 0) {
+        // Assume external sync usage is Neural (most common default)
+        dbUsageByType['neural'] += syncDiff;
+      }
+      
+      // Re-calculate totals for display
       const finalUsage = [
         ...Object.entries(dbUsageByType).map(([voiceType, used]) => ({
           voiceType,
@@ -224,16 +238,6 @@ export async function GET() {
             : 0,
         }))
       ];
-      
-      if (difference > 1000) {
-        finalUsage.push({
-           voiceType: 'External (CLI/Console)',
-           used: difference,
-           limit: 0, 
-           remaining: 0,
-           percentUsed: 0
-        });
-      }
 
       return NextResponse.json({
         type: 'admin',
