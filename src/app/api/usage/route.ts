@@ -114,7 +114,7 @@ export async function GET() {
       const debugResponse = await cwClient.send(debugCommand);
       const debugDatapoints = debugResponse.Datapoints?.sort((a, b) => (b.Timestamp?.getTime() || 0) - (a.Timestamp?.getTime() || 0)) || [];
 
-      // Original query for THIS month total
+      // 1. Fetch CloudWatch Sync Usage (Standard/Neural Real-time)
       const command = new GetMetricStatisticsCommand({
          Namespace: 'AWS/Polly',
          MetricName: 'SynthesizedCharacters',
@@ -125,7 +125,64 @@ export async function GET() {
       });
       
       const response = await cwClient.send(command);
-      const totalAwsChars = response.Datapoints?.[0]?.Sum || 0;
+      const cwSyncChars = response.Datapoints?.[0]?.Sum || 0;
+
+      // 2. Fetch Async Task Usage (Long-Form/Batch) manually via Polly API
+      // CloudWatch often misses StartSpeechSynthesisTask usage
+      const { PollyClient, ListSpeechSynthesisTasksCommand } = await import('@aws-sdk/client-polly');
+      const polly = new PollyClient({
+        region: process.env.AWS_REGION || 'us-east-1',
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        }
+      });
+
+      let asyncTaskChars = 0;
+      let nextToken: string | undefined;
+      const asyncTasksFound = [];
+
+      try {
+        do {
+          const listParams: any = { 
+            MaxResults: 100, 
+            NextToken: nextToken 
+          };
+          const listCmd = new ListSpeechSynthesisTasksCommand(listParams);
+          const listRes = await polly.send(listCmd);
+
+          if (listRes.SynthesisTasks) {
+            for (const task of listRes.SynthesisTasks) {
+              const taskDate = task.CreationTime;
+              // Filter for tasks in Current Month
+              if (taskDate && taskDate >= monthStart && taskDate <= monthEnd) {
+                 if (task.TaskStatus === 'completed') {
+                    asyncTaskChars += (task.RequestCharacters || 0);
+                    asyncTasksFound.push({
+                      id: task.TaskId,
+                      chars: task.RequestCharacters,
+                      date: taskDate
+                    });
+                 }
+              }
+            }
+          }
+          nextToken = listRes.NextToken;
+        } while (nextToken);
+      } catch (err) {
+        console.error("Failed to list Polly tasks:", err);
+      }
+
+      const totalAwsChars = cwSyncChars + asyncTaskChars;
+      
+      // Update Debug Info
+      const debugInfo = {
+        cwSyncChars,
+        asyncTaskChars,
+        asyncTasksFound: asyncTasksFound.length,
+        metrics: availableMetrics,
+        last30DaysDatapoints: debugDatapoints
+      };
 
       // ... (existing DB fetch) ... (omitted for brevity, keep existing flow down to return)
 
@@ -187,11 +244,7 @@ export async function GET() {
         },
         awsTotal: totalAwsChars,
         dbTotal: totalDbChars,
-        debug: {
-          availableMetrics: availableMetrics.length,
-          metrics: availableMetrics,
-          last30DaysDatapoints: debugDatapoints,
-        }
+        debug: debugInfo
       });
     } else {
       // Regular user: Show credit balance and this month's usage

@@ -15,9 +15,12 @@ interface AdminUsage {
   awsTotal?: number;
   dbTotal?: number;
   debug?: {
-    availableMetrics: number;
-    metrics: any[];
-    last30DaysDatapoints: any[];
+    availableMetrics?: number;
+    metrics?: any[];
+    last30DaysDatapoints?: any[];
+    cwSyncChars?: number;
+    asyncTaskChars?: number;
+    asyncTasksFound?: number;
   };
 }
 
@@ -134,8 +137,12 @@ export default function UsageWidget() {
           <p className="font-bold text-gray-300 mb-2">Debug Info:</p>
           <div className="space-y-1">
             <p>AWS Total: {usage.awsTotal?.toLocaleString() ?? '?'}</p>
+            <div className="pl-2 border-l border-white/10 my-1">
+               <p>• Sync (CloudWatch): {usage.debug?.cwSyncChars?.toLocaleString() ?? 0}</p>
+               <p>• Async (Tasks): {usage.debug?.asyncTaskChars?.toLocaleString() ?? 0} ({usage.debug?.asyncTasksFound ?? 0} tasks)</p>
+            </div>
             <p>DB Total: {usage.dbTotal?.toLocaleString() ?? '?'}</p>
-            <p>Metrics Found: {usage.debug?.availableMetrics ?? 0}</p>
+            <p>Metrics Found: {usage.debug?.metrics?.length ?? 0}</p>
             <details>
               <summary className="cursor-pointer hover:text-white">Raw Metrics ({usage.debug?.metrics?.length})</summary>
               <pre className="mt-2 p-2 bg-black/30 rounded overflow-auto max-h-40">
