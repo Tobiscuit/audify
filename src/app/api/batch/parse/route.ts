@@ -215,6 +215,8 @@ export async function POST(request: NextRequest) {
 
     const fileName = file.name.toLowerCase();
     const isPDF = fileName.endsWith('.pdf');
+    const isDOCX = fileName.endsWith('.docx');
+    const isEPUB = fileName.endsWith('.epub');
     let text: string;
     let sections: FlatSection[];
     let warning: string | null = null;
@@ -225,7 +227,68 @@ export async function POST(request: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
 
       if (useAI) {
-        // Use Textract for AI mode (layout detection)
+        // AI MODE GUARDRAILS
+        // 1. Get Page Count (Cheap/Free Local Check)
+        // using a helper or dynamic import of unpdf
+        const { getDocumentProxy } = await import('unpdf');
+        const pdfProxy = await getDocumentProxy(new Uint8Array(buffer));
+        const pageCount = pdfProxy.numPages;
+
+        // 2. Calculate Cost (10 credits per page)
+        const COST_PER_PAGE = 10;
+        const totalCost = pageCount * COST_PER_PAGE;
+
+        // 3. Check User Balance & Settings
+        const { data: userData } = await supabase
+            .from('users')
+            .select('credits, auto_approve_textract')
+            .eq('id', user.id)
+            .single();
+
+        if (!userData) throw new Error('User not found');
+
+        const canAfford = (userData.credits || 0) >= totalCost;
+        const force = formData.get('force') === 'true'; // Client confirmation flag
+
+        // 4. Gate Logic
+        if (!canAfford) {
+            return NextResponse.json({ 
+                error: 'Insufficient credits',
+                details: {
+                    required: totalCost,
+                    balance: userData.credits || 0,
+                    pages: pageCount
+                }
+            }, { status: 402 }); // Payment Required
+        }
+
+        // If not auto-approved AND not forced by client -> Ask for permission
+        if (!userData.auto_approve_textract && !force) {
+             return NextResponse.json({
+                requiresConfirmation: true,
+                cost: totalCost,
+                pages: pageCount,
+                message: `This document is ${pageCount} pages. AI Enhanced Mode costs ${totalCost} credits.`
+            }, { status: 402 }); // Use 402 as "Confirmation Needed" signal
+        }
+
+        // 5. Deduct Credits (if proceeding)
+        if (totalCost > 0) {
+             const { error: deductError } = await supabase.rpc('deduct_credits', {
+                amount: totalCost,
+                user_id: user.id
+             });
+             
+             if (deductError) {
+                 // Fallback if RPC missing or fails
+                 await supabase
+                    .from('users')
+                    .update({ credits: (userData.credits || 0) - totalCost })
+                    .eq('id', user.id);
+             }
+        }
+
+        // 6. Use Textract (Expensive Cloud Call)
         try {
           const result = await extractFromPDFWithTextract(buffer);
           text = result.text;
@@ -240,7 +303,10 @@ export async function POST(request: NextRequest) {
           }));
         } catch (textractError) {
           console.error('Textract error, falling back to pdf-parse:', textractError);
-          warning = 'AI detection failed for this PDF format. Using pattern matching instead.';
+          warning = 'AI detection failed for this PDF format. Credits refunded.';
+          // Refund credits on failure
+          await supabase.rpc('add_credits', { amount: totalCost, user_id: user.id });
+
           // Fall back to pdf-parse
           text = await extractTextFromPDF(buffer);
           sections = detectHierarchicalSections(text);
@@ -250,6 +316,59 @@ export async function POST(request: NextRequest) {
         text = await extractTextFromPDF(buffer);
         sections = detectHierarchicalSections(text);
       }
+    } else if (isDOCX) {
+      // Handle DOCX files
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const mammoth = await import('mammoth');
+      
+      const result = await mammoth.extractRawText({ buffer });
+      text = result.value;
+      
+      if (result.messages && result.messages.length > 0) {
+        console.warn('Mammoth warnings:', result.messages);
+      }
+      
+      sections = detectHierarchicalSections(text);
+    } else if (isEPUB) {
+      // Handle EPUB files
+      // epub2 requires a file path, so we need to write to tmp first
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const fs = await import('fs');
+      const path = await import('path');
+      const os = await import('os');
+      const EPub = await import('epub2').then(m => m.EPub);
+      
+      const tmpPath = path.join(os.tmpdir(), `upload-${Date.now()}.epub`);
+      fs.writeFileSync(tmpPath, buffer);
+      
+      try {
+        const epub = await EPub.createAsync(tmpPath);
+        let fullText = '';
+        
+        // Extract text from each chapter
+        // Note: epub2 returns HTML content, so we need to strip tags
+        // For simplicity, we'll try to get text or use flow
+        
+        // Wait, epub2 gives us access to chapter text but might be HTML.
+        // A simple regex strip is often enough for TTS feeding if we want raw text.
+        
+        // Let's iterate over flow/spine
+        for (const chapterId of epub.flow) {
+            const chap = await epub.getChapterAsync(chapterId);
+            // Simple HTML tag stripper
+            const chapText = chap.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            fullText += chapText + '\n\n';
+        }
+        
+        text = fullText;
+      } finally {
+        // Cleanup
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      }
+      
+      sections = detectHierarchicalSections(text);
     } else {
       // Handle text files (.txt, .md)
       text = await file.text();

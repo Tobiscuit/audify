@@ -8,6 +8,7 @@ CREATE TABLE public.users (
   credits INTEGER DEFAULT 0,
   is_admin BOOLEAN DEFAULT false,
   push_subscription JSONB,
+  auto_approve_textract BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

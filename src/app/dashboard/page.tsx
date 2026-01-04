@@ -305,7 +305,8 @@ export default function DashboardPage() {
                 <div className="text-center">
                   <div className="text-4xl mb-4">📄</div>
                   <div className="text-white font-medium mb-2">Drop a file or click to upload</div>
-                  <div className="text-gray-400 text-sm">Supports .txt, .md, and .pdf files</div>
+                  <div className="text-gray-400 text-sm">Supports .txt, .md, .pdf, .docx, and .epub files</div>
+                  <div className="text-xs text-gray-500 mt-1">(DRM-free EPUBs only)</div>
                   {useAI && <div className="text-purple-400 text-sm mt-2">AI detection enabled (~$0.015/page for PDFs)</div>}
                 </div>
               </button>

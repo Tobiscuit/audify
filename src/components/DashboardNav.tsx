@@ -64,6 +64,38 @@ export default function DashboardNav({ email, credits, isAdmin }: DashboardNavPr
               )}
             </div>
 
+            {/* Notification Bell */}
+            <button
+              onClick={async () => {
+                // ... (existing push logic) ...
+              }}
+              // ... (existing push className) ...
+            >
+              🔔
+            </button>
+
+            {/* Application Settings */}
+            <button
+               onClick={() => {
+                   const newState = confirm('Enable "Auto-Approve AI Costs"?\n\nWhen enabled, we will automatically deduct credits for AI Document Analysis (10 credits/page) without asking for confirmation every time.\n\nClick OK to Enable, Cancel to Disable.');
+                   
+                   // Update preference in DB
+                   const supabase = createClient();
+                   supabase.auth.getUser().then(({ data: { user } }) => {
+                       if (user) {
+                           supabase.from('users').update({ auto_approve_textract: newState }).eq('id', user.id).then(({ error }) => {
+                               if (error) alert('Failed to save setting');
+                               else alert(newState ? 'Auto-Approve Enabled ⚡' : 'Confirmation Mode Enabled 🛡️');
+                           });
+                       }
+                   });
+               }}
+               className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/10"
+               title="Settings"
+            >
+                ⚙️
+            </button>
+
             {/* User Menu */}
             <div className="flex items-center gap-3">
               <span className="text-gray-400 text-sm hidden md:block">{email}</span>
