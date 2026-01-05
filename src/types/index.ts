@@ -34,6 +34,7 @@ export interface SynthesizeRequest {
   voiceId: string;
   engine: 'standard' | 'neural' | 'generative' | 'long-form';
   outputFormat?: 'mp3' | 'ogg_vorbis';
+  lexiconNames?: string[];
 }
 
 // Synthesize response

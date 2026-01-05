@@ -88,3 +88,44 @@ CREATE POLICY "Users can read own transactions" ON public.transactions
 CREATE INDEX idx_usage_history_user_id ON public.usage_history(user_id);
 CREATE INDEX idx_usage_history_created_at ON public.usage_history(created_at);
 CREATE INDEX idx_transactions_user_id ON public.transactions(user_id);
+
+
+-- LEXICONS (Custom Pronunciations)
+CREATE TABLE IF NOT EXISTS public.lexicons (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.users(id) NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    mappings JSONB DEFAULT '[]'::JSONB, -- Array of { word: string, replacement: string, type: 'alias'|'phoneme' }
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(user_id, name)
+);
+
+-- RLS for Lexicons
+ALTER TABLE public.lexicons ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own lexicons" ON public.lexicons
+    FOR ALL USING (auth.uid() = user_id);
+
+-- RPC: Atomic Credit Deduction (Bank-Grade Transaction)
+CREATE OR REPLACE FUNCTION deduct_credits(row_id uuid, amount int)
+RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  new_credits int;
+BEGIN
+  UPDATE public.users
+  SET credits = credits - amount
+  WHERE id = row_id AND credits >= amount
+  RETURNING credits INTO new_credits;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Insufficient credits';
+  END IF;
+
+  RETURN new_credits;
+END;
+$$;

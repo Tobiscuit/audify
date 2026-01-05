@@ -20,46 +20,56 @@ export default function DashboardNav({ email, credits, isAdmin }: DashboardNavPr
   };
 
   return (
-    <nav className="bg-white/5 backdrop-blur-xl border-b border-white/10">
-      <div className="container mx-auto px-4 py-4">
+    <nav className="glass sticky top-0 z-50 border-b border-white/5">
+      <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <Link href="/dashboard" className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Audify
+          <Link href="/dashboard" className="text-2xl font-bold tracking-tight">
+            <span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">Audify</span>
           </Link>
 
           {/* Navigation Links */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-1 md:gap-2">
+            {[
+                { href: '/dashboard', label: 'Generate' },
+                { href: '/dashboard/library', label: 'Library' },
+                { href: '/dashboard/credits', label: 'Credits' },
+            ].map(link => (
+                <Link 
+                  key={link.href}
+                  href={link.href} 
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                >
+                  {link.label}
+                </Link>
+            ))}
+
             <Link 
-              href="/dashboard" 
-              className="text-gray-300 hover:text-white transition-colors"
+              href="/dashboard/developers" 
+              className="ml-2 px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-full transition-all"
             >
-              Generate
+              API
             </Link>
             <Link 
-              href="/dashboard/library" 
-              className="text-gray-300 hover:text-white transition-colors"
+              href="/dashboard/pronunciations" 
+              className="px-2 py-1.5 text-gray-400 hover:text-white transition-colors"
+              title="Pronunciations"
             >
-              Library
-            </Link>
-            <Link 
-              href="/dashboard/credits" 
-              className="text-gray-300 hover:text-white transition-colors"
-            >
-              Buy Credits
+              🗣️
             </Link>
           </div>
 
           {/* User Info */}
           <div className="flex items-center gap-4">
             {/* Credits Badge */}
-            <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 px-4 py-2 rounded-full border border-purple-500/30">
-              <span className="text-purple-300 font-medium">
-                {isAdmin ? '∞' : credits.toLocaleString()} credits
+            <div className="hidden md:flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-full border border-white/5">
+              <span className="text-indigo-300 font-medium text-sm">
+                {isAdmin ? '∞' : credits.toLocaleString()}
               </span>
+              <span className="text-xs text-gray-500">credits</span>
               {isAdmin && (
-                <span className="ml-2 text-xs bg-purple-500 text-white px-2 py-0.5 rounded-full">
-                  ADMIN
+                <span className="text-[10px] bg-indigo-500 text-white px-1.5 rounded uppercase tracking-wider font-bold">
+                  Admin
                 </span>
               )}
             </div>
@@ -69,7 +79,7 @@ export default function DashboardNav({ email, credits, isAdmin }: DashboardNavPr
               onClick={async () => {
                 // ... (existing push logic) ...
               }}
-              // ... (existing push className) ...
+              className="text-gray-400 hover:text-white transition-colors"
             >
               🔔
             </button>
@@ -97,11 +107,13 @@ export default function DashboardNav({ email, credits, isAdmin }: DashboardNavPr
             </button>
 
             {/* User Menu */}
-            <div className="flex items-center gap-3">
-              <span className="text-gray-400 text-sm hidden md:block">{email}</span>
+            <div className="flex items-center gap-3 pl-4 border-l border-white/5">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-indigo-500/20">
+                  {email[0].toUpperCase()}
+              </div>
               <button
                 onClick={handleSignOut}
-                className="text-gray-400 hover:text-white transition-colors text-sm"
+                className="text-gray-400 hover:text-white transition-colors text-xs"
               >
                 Sign out
               </button>

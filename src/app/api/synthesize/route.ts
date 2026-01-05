@@ -1,149 +1,108 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getAuthenticatedUser } from '@/lib/auth-helpers';
 import { isAdminUser } from '@/lib/auth/admin';
-import { synthesizeSpeech, calculateCreditsRequired, getVoiceType } from '@/lib/aws/polly';
-import { uploadAudio, getPresignedUrl, generateAudioKey } from '@/lib/aws/s3';
-import type { SynthesizeRequest, SynthesizeResponse } from '@/types';
-import { VoiceId, Engine } from '@aws-sdk/client-polly';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+// Domain Services
+import { BillingService } from '@/services/billing';
+import { AudioService } from '@/services/audio';
+import { LoggingService } from '@/services/logging';
+import { SynthesizeRequest } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // 1. Authenticate & Setup Context
+    const { user, authType, error: authError } = await getAuthenticatedUser(request);
 
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      if (authError?.includes('Server misconfigured')) {
+          return NextResponse.json({ error: authError }, { status: 500 });
+      }
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
+    // 2. Initialize Infrastructure (DB Client)
+    let supabase;
+    if (authType === 'api_key') {
+        // Use Admin Client to bypass RLS for API Key auth
+        supabase = createSupabaseClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+    } else {
+        // Use Standard Client (Cookies)
+        supabase = await createClient();
+    }
+
+    // 3. Initialize Domain Services (Dependency Injection)
+    const billing = new BillingService(supabase);
+    const audio = new AudioService();
+    const logger = new LoggingService(supabase);
+
+    // 4. Parse & Validate Input
     const body: SynthesizeRequest = await request.json();
     const { text, voiceId, engine, outputFormat } = body;
 
     if (!text || !voiceId || !engine) {
-      return NextResponse.json(
-        { error: 'Missing required fields: text, voiceId, engine' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
     }
 
-    // Calculate character count and credits required
-    const charCount = text.length;
-    const voiceType = getVoiceType(engine as Engine);
-    const creditsRequired = calculateCreditsRequired(charCount, voiceType);
+    // 5. Calculate Cost
+    const cost = audio.calculateCost(text, engine);
+    const isAdmin = isAdminUser(user.email || '');
 
-    // Check if user is admin (free bypass)
-    const isAdmin = isAdminUser(user.email);
-
-    // Get user's current credits from database
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('credits')
-      .eq('id', user.id)
-      .single();
-
-    if (userError) {
-      // User doesn't exist in our table yet, create them
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
-          id: user.id,
-          email: user.email,
-          credits: 0,
-          is_admin: isAdmin,
-        } as never);
-
-      if (insertError) {
-        console.error('Error creating user:', insertError);
+    // 6. Process Liability (Billing Gate)
+    let remainingCredits = 0;
+    try {
+        remainingCredits = await billing.checkAndDeductCredits(user.id, cost, isAdmin);
+    } catch (e: any) {
         return NextResponse.json(
-          { error: 'Failed to initialize user account' },
-          { status: 500 }
+            { error: e.message, creditsRequired: cost }, 
+            { status: 402 } 
         );
-      }
-
-      // If not admin and no credits, return payment required
-      if (!isAdmin) {
-        return NextResponse.json(
-          { error: 'Insufficient credits', creditsRequired, currentCredits: 0 },
-          { status: 402 }
-        );
-      }
     }
 
-    const currentCredits = (userData as { credits: number } | null)?.credits || 0;
+    // 7a. Fetch Active Lexicons
+    // We fetch all lexicons for this user to apply globally.
+    // In future, we could allow selecting specific ones per request.
+    const { data: lexicons } = await supabase
+        .from('lexicons')
+        .select('name')
+        .eq('user_id', user.id);
+    
+    const lexiconNames = lexicons?.map(l => l.name) || [];
 
-    // Check credits (skip for admin)
-    if (!isAdmin && currentCredits < creditsRequired) {
-      return NextResponse.json(
-        { error: 'Insufficient credits', creditsRequired, currentCredits },
-        { status: 402 }
-      );
-    }
-
-    // Synthesize speech with AWS Polly
-    const audioStream = await synthesizeSpeech({
-      text,
-      voiceId: voiceId as VoiceId,
-      engine: engine as Engine,
-      outputFormat: (outputFormat as 'mp3' | 'ogg_vorbis') || 'mp3',
+    // 7b. Execute Business Logic (Synthesis)
+    const { audioUrl, s3Key, format } = await audio.synthesizeAndStore({
+        text,
+        voiceId,
+        engine,
+        outputFormat: outputFormat || 'mp3',
+        userId: user.id,
+        lexiconNames
     });
 
-    // Generate unique key for S3
-    const timestamp = Date.now();
-    const format = (outputFormat as 'mp3' | 'ogg_vorbis') || 'mp3';
-    const s3Key = generateAudioKey(user.id, timestamp, format);
+    // 8. Audit Logging (Async/Fire-and-forget)
+    await logger.logSynthesizeUsage({
+        userId: user.id,
+        voiceId,
+        engine,
+        charCount: text.length,
+        creditsUsed: isAdmin ? 0 : cost,
+        s3Key
+    });
 
-    // Upload to S3 with correct content type
-    const contentType = format === 'ogg_vorbis' ? 'audio/ogg' : 'audio/mpeg';
-    await uploadAudio(audioStream, s3Key, contentType);
-
-    // Get presigned URL for playback
-    const audioUrl = await getPresignedUrl(s3Key);
-
-    // Deduct credits (skip for admin)
-    if (!isAdmin) {
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ credits: currentCredits - creditsRequired } as never)
-        .eq('id', user.id);
-
-      if (updateError) {
-        console.error('Error updating credits:', updateError);
-      }
-    }
-
-    // Log usage history
-    const { error: historyError } = await supabase
-      .from('usage_history')
-      .insert({
-        user_id: user.id,
-        voice_id: voiceId,
-        voice_type: voiceType,
-        char_count: charCount,
-        credits_used: isAdmin ? 0 : creditsRequired,
-        s3_key: s3Key,
-      } as never);
-
-    if (historyError) {
-      console.error('Error logging usage:', historyError);
-    }
-
-    const response: SynthesizeResponse = {
+    // 9. Return Response
+    return NextResponse.json({
       audioUrl,
       audioId: s3Key,
-      creditsUsed: isAdmin ? 0 : creditsRequired,
-      remainingCredits: isAdmin ? currentCredits : currentCredits - creditsRequired,
-    };
+      creditsUsed: isAdmin ? 0 : cost,
+      remainingCredits: isAdmin ? remainingCredits + cost : remainingCredits, // Adjust for display if needed
+    });
 
-    return NextResponse.json(response);
   } catch (error) {
     console.error('Synthesize error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

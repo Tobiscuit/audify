@@ -38,6 +38,7 @@ export interface SynthesizeOptions {
   engine: Engine;
   outputFormat?: OutputFormat;
   languageCode?: LanguageCode;
+  lexiconNames?: string[];
 }
 
 export async function synthesizeSpeech(options: SynthesizeOptions): Promise<Uint8Array> {
@@ -47,6 +48,7 @@ export async function synthesizeSpeech(options: SynthesizeOptions): Promise<Uint
     Engine: options.engine,
     OutputFormat: options.outputFormat || 'mp3',
     LanguageCode: options.languageCode,
+    LexiconNames: options.lexiconNames,
   });
 
   const response = await getPollyClient().send(command);
