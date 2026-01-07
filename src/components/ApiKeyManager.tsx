@@ -19,8 +19,8 @@ export default function ApiKeyManager({ initialKey }: ApiKeyManagerProps) {
     const handleGenerate = async () => {
         setLoading(true);
         try {
-            const newKey = await generateApiKey();
-            setApiKey(newKey);
+            const result = await generateApiKey();
+            setApiKey(result.apiKey);
             toast.success('API Key generated successfully');
         } catch (error) {
             toast.error('Failed to generate key');
