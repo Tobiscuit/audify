@@ -19,7 +19,22 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const isAdmin = isAdminUser(user.email);
+    // Check admin status from DB
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('credits, is_admin')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+       console.error('Failed to fetch user data', userError);
+       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const isAdmin = userData.is_admin || false;
+    // Fallback to hardcoded list for bootstrapping if DB field is false but email matches
+    // (Optional, but safe)
+    // const isAdmin = userData.is_admin || isAdminUser(user.email);
 
     // Get current month's start date
     const now = new Date();
@@ -281,13 +296,7 @@ export async function GET() {
       });
     } else {
       // Regular user: Show credit balance and this month's usage
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('credits')
-        .eq('id', user.id)
-        .single();
-
-      const credits = (userData as { credits: number } | null)?.credits || 0;
+      const credits = userData.credits || 0;
 
       // Get user's monthly usage
       const { data: usageData, error: usageError } = await supabase

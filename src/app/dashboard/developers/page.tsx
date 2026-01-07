@@ -18,7 +18,7 @@ export default async function DevelopersPage() {
 
       {/* Main Content */}
       <div className="grid grid-cols-1 gap-8">
-        <ApiKeyManager initialApiKey={apiKey} />
+        <ApiKeyManager initialKey={apiKey} />
         
         {/* Comparison Table / Info */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

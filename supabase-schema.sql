@@ -64,7 +64,12 @@ CREATE POLICY "Users can read own data" ON public.users
   FOR SELECT USING (auth.uid() = id);
 
 CREATE POLICY "Users can update own data" ON public.users
-  FOR UPDATE USING (auth.uid() = id);
+  FOR UPDATE USING (auth.uid() = id)
+  WITH CHECK (
+    -- Critical Security: Prevent users from escalating privileges or forging credits
+    (is_admin IS NOT DISTINCT FROM (SELECT is_admin FROM public.users WHERE id = auth.uid())) AND
+    (credits IS NOT DISTINCT FROM (SELECT credits FROM public.users WHERE id = auth.uid()))
+  );
 
 CREATE POLICY "Service role can insert users" ON public.users
   FOR INSERT WITH CHECK (true);
